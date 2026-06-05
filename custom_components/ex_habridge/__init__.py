@@ -30,6 +30,7 @@ PLATFORMS: list[Platform] = [
     Platform.SELECT,  # For direction control
     Platform.SENSOR,  # For speed/direction feedback
     Platform.SWITCH,  # For turnouts, track power, functions, etc.
+    Platform.TEXT,  # For raw serial command input
 ]
 
 
