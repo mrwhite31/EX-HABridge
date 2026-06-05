@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import re
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.helpers.dispatcher import (
@@ -262,17 +263,28 @@ class EXCSBaseClient:
 
         try:
             LOGGER.debug("Listening for incoming messages from EX-CommandStation")
+            buf = ""
             while not self._reader.at_eof():
-                # Avoid blocking indefinitely: EX-CommandStation sends heartbeat
-                # messages, so we can set a timeout for reading
-                line = await asyncio.wait_for(
-                    self._reader.readline(), timeout=HEARTBEAT_TIMEOUT
+                # Read raw bytes as they arrive — do NOT wait for newlines.
+                # DCC-EX concatenates messages without per-message newlines, e.g.:
+                # <Q 164><q 165><# 120>\n
+                # Parsing by <...> boundaries gives immediate response to each message.
+                chunk = await asyncio.wait_for(
+                    self._reader.read(256), timeout=HEARTBEAT_TIMEOUT
                 )
-                if not line:
+                if not chunk:
                     break
 
-                message = line.decode("ascii").strip()
-                self._parse_message(message)
+                buf += chunk.decode("ascii", errors="ignore")
+
+                # Extract every complete <...> message from the buffer
+                while True:
+                    start = buf.find("<")
+                    end = buf.find(">", start + 1) if start != -1 else -1
+                    if start == -1 or end == -1:
+                        break
+                    self._parse_message(buf[start : end + 1])
+                    buf = buf[end + 1 :]
 
             # Handle EOF
             msg = "Connection closed by EX-CommandStation"
